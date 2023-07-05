@@ -56,7 +56,7 @@ func execute{
     let (address) = get_caller_address();
 
     assert address = 0;
-    
+
     return Kakarot.execute(
         starknet_contract_address=0,
         evm_contract_address=0,
