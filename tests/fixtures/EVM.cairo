@@ -7,6 +7,7 @@
 from starkware.cairo.common.cairo_builtins import HashBuiltin, BitwiseBuiltin
 from starkware.cairo.common.uint256 import Uint256
 from starkware.cairo.common.alloc import alloc
+from starkware.starknet.common.syscalls import get_caller_address
 
 // Local dependencies
 from kakarot.library import Kakarot
@@ -36,7 +37,7 @@ func constructor{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr
     return ();
 }
 
-@external
+@view
 func execute{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
 }(value: felt, bytecode_len: felt, bytecode: felt*, calldata_len: felt, calldata: felt*) -> (
@@ -52,6 +53,10 @@ func execute{
     return_data: felt*,
     gas_used: felt,
 ) {
+    let (address) = get_caller_address();
+
+    assert address = 0;
+    
     return Kakarot.execute(
         starknet_contract_address=0,
         evm_contract_address=0,

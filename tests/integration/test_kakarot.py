@@ -76,7 +76,7 @@ class TestKakarot:
                 value=int(params["value"]),
                 bytecode=hex_string_to_bytes_array(params["code"]),
                 calldata=hex_string_to_bytes_array(params["calldata"]),
-            ).call(caller_address=owner.starknet_address)
+            ).call(caller_address=0)
 
         stack_result = extract_stack_from_execute(res.result)
         memory_result = extract_memory_from_execute(res.result)
