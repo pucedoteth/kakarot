@@ -35,6 +35,11 @@ func __validate__{
     calldata_len: felt,
     calldata: felt*,
 ) {
+    let (caller) = get_caller_address();
+    with_attr error_message("ExternallyOwnedAccount: reentrant call") {
+        assert caller = 0;
+    }
+
     ExternallyOwnedAccount.validate(
         call_array_len=call_array_len,
         call_array=call_array,

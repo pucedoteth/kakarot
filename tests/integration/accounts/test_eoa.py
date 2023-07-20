@@ -14,6 +14,13 @@ class TestExternallyOwnedAccount:
             call_info = await address.starknet_contract.get_evm_address().call()
             assert call_info.result.evm_address == int(address.address, 16)
 
+    class TestValidate:
+        async def test_should_raise_when_called_with_nonzero_caller(self, owner, other):
+            with kakarot_error("ExternallyOwnedAccount: reentrant call"):
+                await owner.starknet_contract.__validate__([], []).execute(
+                    caller_address=1
+                )
+
     class TestValidateDeclare:
         async def test_should_raise(self, owner):
             with kakarot_error():
