@@ -32,6 +32,19 @@ from kakarot.interfaces.interfaces import IAccount, IContractAccount
 // @title Helper Functions
 // @notice This file contains a selection of helper function that simplify tasks such as type conversion and bit manipulation
 namespace Helpers {
+    func safe_get_evm_address{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr,
+        bitwise_ptr: BitwiseBuiltin*,
+    }(starknet_address: felt) -> felt {
+        if (starknet_address == 0) {
+            return starknet_address;
+        }
+        let (current_evm_address) = IAccount.get_evm_address(starknet_address);
+        return current_evm_address;
+    }
+
     func to_uint256{range_check_ptr}(val: felt) -> Uint256 {
         let (high, low) = split_felt(val);
         let res = Uint256(low, high);
