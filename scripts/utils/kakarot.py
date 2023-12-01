@@ -5,10 +5,12 @@ from pathlib import Path
 from types import MethodType
 from typing import List, Optional, Union, cast
 
+import rlp
 import toml
+from cytoolz import pipe
 from eth_abi.exceptions import InsufficientDataBytes
 from eth_account import Account as EvmAccount
-from eth_account._utils.typed_transactions import TypedTransaction
+from eth_account._utils.typed_transactions import DynamicFeeTransaction
 from eth_keys import keys
 from eth_utils.address import to_checksum_address
 from hexbytes import HexBytes
@@ -37,7 +39,7 @@ from scripts.constants import (
 from scripts.utils.starknet import call as _call_starknet
 from scripts.utils.starknet import fund_address as _fund_starknet_address
 from scripts.utils.starknet import get_contract as _get_starknet_contract
-from scripts.utils.starknet import get_deployments
+from scripts.utils.starknet import get_deployments, int_to_uint256
 from scripts.utils.starknet import invoke as _invoke_starknet
 from scripts.utils.starknet import wait_for_transaction
 
@@ -287,32 +289,63 @@ async def eth_send_transaction(
 ):
     """Execute the data at the EVM contract to on Kakarot."""
     evm_account = caller_eoa or await get_eoa()
+    nonce = await evm_account.get_nonce()
 
-    typed_transaction = TypedTransaction.from_dict(
-        {
-            "type": 0x2,
-            "chainId": KAKAROT_CHAIN_ID,
-            "nonce": await evm_account.get_nonce(),
-            "gas": gas,
-            "maxPriorityFeePerGas": int(1e19),
-            "maxFeePerGas": int(1e19),
-            "to": to_checksum_address(to) if to else None,
-            "value": value,
-            "data": data,
-        }
-    )
+    payload = {
+        "type": 0x2,
+        "chainId": KAKAROT_CHAIN_ID,
+        "nonce": nonce,
+        "gas": gas,
+        "maxPriorityFeePerGas": int(1e19),
+        "maxFeePerGas": int(1e19),
+        "to": to_checksum_address(to) if to else None,
+        "value": value,
+        "data": data,
+    }
+
+    typed_transaction = DynamicFeeTransaction.from_dict(payload)
+
     evm_tx = EvmAccount.sign_transaction(
         typed_transaction.as_dict(),
         hex(evm_account.signer.private_key),
     )
-    response = await evm_account.execute(
-        calls=Call(
-            to_addr=0xDEAD,  # unused in current EOA implementation
-            selector=0xDEAD,  # unused in current EOA implementation
-            calldata=evm_tx.rawTransaction,
-        ),
+
+    # We invoke eth_send_transaction for clarity but in reality,
+    # The eoa.__execute__ will always call eth_send_transaction of Kakarot
+    r = int_to_uint256(evm_tx.r)
+    s = int_to_uint256(evm_tx.s)
+
+    # RPC-structured transaction to rlp-structured transaction
+    rlp_serializer = typed_transaction.__class__._unsigned_transaction_serializer
+    encoded_unsigned_tx = pipe(
+        rlp_serializer.from_dict(typed_transaction.dictionary),  # type: ignore  # noqa: E501
+        lambda val: rlp.encode(val),  # rlp([...])
+        lambda val: bytes([typed_transaction.__class__.transaction_type])
+        + val,  # (0x01 || rlp([...]))
+    )
+
+    prepared_invoke = await evm_account._prepare_invoke(
+        calls=[
+            Call(
+                to_addr=0xDEAD,  # unused in current EOA implementation
+                selector=0xDEAD,  # unused in current EOA implementation
+                calldata=encoded_unsigned_tx,
+            )
+        ],
         max_fee=int(5e17) if max_fee is None else max_fee,
     )
+    # We need to reconstruct the prepared_invoke with the new signature
+    # And Invoke.signature is Frozen
+    prepared_invoke = prepared_invoke.__class__(
+        version=prepared_invoke.version,
+        max_fee=prepared_invoke.max_fee,
+        signature=[r["low"], r["high"], s["low"], s["high"], evm_tx.v],
+        nonce=prepared_invoke.nonce,
+        sender_address=prepared_invoke.sender_address,
+        calldata=prepared_invoke.calldata,
+    )
+    response = await evm_account.client.send_transaction(prepared_invoke)
+
     await wait_for_transaction(tx_hash=response.transaction_hash)
     receipt = await CLIENT.get_transaction_receipt(response.transaction_hash)
     transaction_events = [
@@ -324,8 +357,6 @@ async def eth_send_transaction(
     if len(transaction_events) != 1:
         raise ValueError("Cannot locate the single event giving the actual tx status")
     (
-        msg_hash_low,
-        msg_hash_high,
         response_len,
         *response,
         success,
