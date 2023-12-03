@@ -206,9 +206,6 @@ namespace EthTransaction {
         assert nonce = account_nonce;
         assert chain_id = Constants.CHAIN_ID;
 
-        // v := yParity must be 1 or 0
-        assert is_not_zero(v) * is_not_zero(v - 1) = 0;
-
         let (local words: felt*) = alloc();
         let (keccak_ptr: felt*) = alloc();
         let keccak_ptr_start = keccak_ptr;
@@ -231,10 +228,21 @@ namespace EthTransaction {
         }
         finalize_keccak(keccak_ptr_start, keccak_ptr);
 
+        // Note: here, the validate process assumes an ECDSA signature, and r, s, v field
+        // Technically, the transaction type can determine the signature scheme.
+        let _is_legacy = is_legacy_tx(tx_data);
+        if (_is_legacy != FALSE) {
+            tempvar parity = (v - 2 * Constants.CHAIN_ID - 35);
+        } else {
+            tempvar parity = v;
+        }
+
         let (local keccak_ptr: felt*) = alloc();
         local keccak_ptr_start: felt* = keccak_ptr;
         with keccak_ptr {
-            verify_eth_signature_uint256(msg_hash=msg_hash, r=r, s=s, v=v, eth_address=address);
+            verify_eth_signature_uint256(
+                msg_hash=msg_hash, r=r, s=s, v=parity, eth_address=address
+            );
         }
         finalize_keccak(keccak_ptr_start, keccak_ptr);
         return ();

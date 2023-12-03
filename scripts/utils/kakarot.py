@@ -5,9 +5,7 @@ from pathlib import Path
 from types import MethodType
 from typing import List, Optional, Union, cast
 
-import rlp
 import toml
-from cytoolz import pipe
 from eth_abi.exceptions import InsufficientDataBytes
 from eth_account import Account as EvmAccount
 from eth_account._utils.typed_transactions import DynamicFeeTransaction
@@ -42,6 +40,7 @@ from scripts.utils.starknet import get_contract as _get_starknet_contract
 from scripts.utils.starknet import get_deployments, int_to_uint256
 from scripts.utils.starknet import invoke as _invoke_starknet
 from scripts.utils.starknet import wait_for_transaction
+from tests.utils.helpers import rlp_encode_tx
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -315,14 +314,7 @@ async def eth_send_transaction(
     r = int_to_uint256(evm_tx.r)
     s = int_to_uint256(evm_tx.s)
 
-    # RPC-structured transaction to rlp-structured transaction
-    rlp_serializer = typed_transaction.__class__._unsigned_transaction_serializer
-    encoded_unsigned_tx = pipe(
-        rlp_serializer.from_dict(typed_transaction.dictionary),  # type: ignore  # noqa: E501
-        lambda val: rlp.encode(val),  # rlp([...])
-        lambda val: bytes([typed_transaction.__class__.transaction_type])
-        + val,  # (0x01 || rlp([...]))
-    )
+    encoded_unsigned_tx = rlp_encode_tx(payload)
 
     prepared_invoke = await evm_account._prepare_invoke(
         calls=[
@@ -344,6 +336,7 @@ async def eth_send_transaction(
         sender_address=prepared_invoke.sender_address,
         calldata=prepared_invoke.calldata,
     )
+
     response = await evm_account.client.send_transaction(prepared_invoke)
 
     await wait_for_transaction(tx_hash=response.transaction_hash)

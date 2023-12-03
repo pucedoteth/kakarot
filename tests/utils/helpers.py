@@ -3,8 +3,11 @@ from textwrap import wrap
 from typing import List, Tuple
 
 import rlp
+from cytoolz import pipe
 from eth_abi import encode
 from eth_account import Account
+from eth_account._utils.transaction_utils import transaction_rpc_to_rlp_structure
+from eth_account._utils.typed_transactions import TypedTransaction
 from eth_keys import keys
 from eth_keys.datatypes import PrivateKey
 from eth_utils import decode_hex, keccak, to_checksum_address
@@ -15,6 +18,47 @@ from tests.utils.constants import CHAIN_ID
 PERMIT_TYPEHASH = keccak(
     text="Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
 )
+
+
+def rlp_encode_tx(tx: dict) -> bytes:
+    if "type" in tx:
+        typed_transaction = TypedTransaction.from_dict(tx)
+
+        sanitized_transaction = transaction_rpc_to_rlp_structure(
+            typed_transaction.transaction.dictionary
+        )
+
+        # RPC-structured transaction to rlp-structured transaction
+        rlp_serializer = (
+            typed_transaction.transaction.__class__._unsigned_transaction_serializer
+        )
+        encoded_unsigned_tx = pipe(
+            rlp_serializer.from_dict(sanitized_transaction),  # type: ignore  # noqa: E501
+            lambda val: rlp.encode(val),  # rlp([...])
+            lambda val: bytes(
+                [typed_transaction.transaction.__class__.transaction_type]
+            )
+            + val,  # (0x01 || rlp([...]))
+        )
+
+        return encoded_unsigned_tx
+    else:
+        legacy_tx = list(
+            [
+                tx["nonce"],
+                tx["gasPrice"],
+                tx["gas"],
+                tx["to"],
+                tx["value"],
+                tx["data"],
+                tx["chainId"],
+                0,
+                0,
+            ]
+        )
+        encoded_unsigned_tx = rlp.encode(legacy_tx)
+
+        return encoded_unsigned_tx
 
 
 def hex_string_to_bytes_array(h: str):
