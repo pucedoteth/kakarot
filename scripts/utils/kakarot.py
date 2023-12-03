@@ -8,7 +8,7 @@ from typing import List, Optional, Union, cast
 import toml
 from eth_abi.exceptions import InsufficientDataBytes
 from eth_account import Account as EvmAccount
-from eth_account._utils.typed_transactions import DynamicFeeTransaction
+from eth_account._utils.typed_transactions import TypedTransaction
 from eth_keys import keys
 from eth_utils.address import to_checksum_address
 from hexbytes import HexBytes
@@ -302,7 +302,7 @@ async def eth_send_transaction(
         "data": data,
     }
 
-    typed_transaction = DynamicFeeTransaction.from_dict(payload)
+    typed_transaction = TypedTransaction.from_dict(payload)
 
     evm_tx = EvmAccount.sign_transaction(
         typed_transaction.as_dict(),
