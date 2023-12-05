@@ -43,24 +43,13 @@ class TestEthTransaction:
             address = private_key.public_key.to_checksum_address()
             signed = Account.sign_transaction(transaction, private_key)
 
-            r = int_to_uint256(signed.r)
-            s = int_to_uint256(signed.s)
-
-            print(transaction)
-
             encoded_unsigned_tx = rlp_encode_tx(transaction)
 
             await eth_transaction.test__validate(
                 int(address, 16),
                 transaction["nonce"],
-                (
-                    r["low"],
-                    r["high"],
-                ),
-                (
-                    s["low"],
-                    s["high"],
-                ),
+                int_to_uint256(signed.r),
+                int_to_uint256(signed.s),
                 signed["v"],
                 list(encoded_unsigned_tx),
             ).call()

@@ -15,6 +15,7 @@ from hexbytes import HexBytes
 from starknet_py.net.account.account import Account
 from starknet_py.net.client_errors import ClientError
 from starknet_py.net.client_models import Call, Event
+from starknet_py.net.models.transaction import Invoke
 from starknet_py.net.signer.stark_curve_signer import KeyPair
 from starkware.starknet.public.abi import starknet_keccak
 from web3 import Web3
@@ -314,7 +315,7 @@ async def eth_send_transaction(
     r = int_to_uint256(evm_tx.r)
     s = int_to_uint256(evm_tx.s)
 
-    encoded_unsigned_tx = rlp_encode_tx(payload)
+    encoded_unsigned_tx = rlp_encode_tx(typed_transaction.as_dict())
 
     prepared_invoke = await evm_account._prepare_invoke(
         calls=[
@@ -328,7 +329,7 @@ async def eth_send_transaction(
     )
     # We need to reconstruct the prepared_invoke with the new signature
     # And Invoke.signature is Frozen
-    prepared_invoke = prepared_invoke.__class__(
+    prepared_invoke = Invoke(
         version=prepared_invoke.version,
         max_fee=prepared_invoke.max_fee,
         signature=[r["low"], r["high"], s["low"], s["high"], evm_tx.v],
