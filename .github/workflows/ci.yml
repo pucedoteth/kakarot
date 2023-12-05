@@ -98,6 +98,8 @@ jobs:
         with:
           profile: minimal
           override: true
+      - name: Pull submodules
+        run: git submodule update --init --recursive
       - name: Retrieve cached dependencies
         uses: Swatinem/rust-cache@v2
       - name: Install Katana
