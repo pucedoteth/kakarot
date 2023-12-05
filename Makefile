@@ -1,8 +1,5 @@
 .PHONY: build test coverage
 
-pull-ef-tests: .gitmodules
-	git submodule update --init --recursive
-
 build: check
 	$(MAKE) clean
 	poetry run python ./scripts/compile_kakarot.py
